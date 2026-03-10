@@ -1,3 +1,5 @@
+FROM registry.lazycat.cloud/x/lzc-aipod-vllm:d59c2ca AS vllm_runtime
+FROM registry.lazycat.cloud/x/lzc-aipod-onnx:f503fe0 AS onnx_runtime
 FROM registry.lazycat.cloud/x/lzc-aipod-cuda:2a9aebc
 
 SHELL ["/bin/bash", "-lc"]
@@ -38,24 +40,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace/GPT-SoVITS
 
 COPY requirements.txt requirements-test.txt /workspace/GPT-SoVITS/
+COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torch /usr/local/lib/python3.10/dist-packages/torch
+COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torch-2.10.0.dist-info /usr/local/lib/python3.10/dist-packages/torch-2.10.0.dist-info
+COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/functorch /usr/local/lib/python3.10/dist-packages/functorch
+COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torchgen /usr/local/lib/python3.10/dist-packages/torchgen
+COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torchvision /usr/local/lib/python3.10/dist-packages/torchvision
+COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torchvision-0.25.0.dist-info /usr/local/lib/python3.10/dist-packages/torchvision-0.25.0.dist-info
+COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/triton /usr/local/lib/python3.10/dist-packages/triton
+COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/triton-3.5.1.dist-info /usr/local/lib/python3.10/dist-packages/triton-3.5.1.dist-info
+COPY --from=onnx_runtime /usr/local/lib/python3.10/dist-packages/onnxruntime /usr/local/lib/python3.10/dist-packages/onnxruntime
+COPY --from=onnx_runtime /usr/local/lib/python3.10/dist-packages/onnxruntime_gpu-1.24.3.dist-info /usr/local/lib/python3.10/dist-packages/onnxruntime_gpu-1.24.3.dist-info
 
-RUN python3 -m pip install --no-cache-dir \
-      uv \
-      -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}"
+RUN grep -Ev '^(pyopenjtalk|onnxruntime|onnxruntime-gpu|torch|torchvision|torchaudio|triton)($|[;=<> ])' requirements.txt > requirements.jetson.txt
 
-RUN grep -Ev '^(pyopenjtalk|onnxruntime|onnxruntime-gpu)($|[;=<> ])' requirements.txt > requirements.jetson.txt
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system \
-      torch torchvision torchaudio torchcodec triton \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install \
+      --no-deps "torchaudio==2.10.0" "numpy<2" flatbuffers \
       -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}" && \
-    uv pip install --system \
-      "onnxruntime-gpu==1.24.3" "numpy<2" \
-      --default-index "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}" && \
-    uv pip install --system \
+    python3 -m pip install \
       -r requirements.jetson.txt \
       -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}" && \
-    uv pip install --system \
+    python3 -m pip install \
       -r requirements-test.txt \
       -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}"
 

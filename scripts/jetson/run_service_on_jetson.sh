@@ -9,7 +9,13 @@ REMOTE_DIR="${JETSON_DIR:-/home/nvidia/GPT-SoVITS}"
 "$SCRIPT_DIR/build_on_jetson.sh"
 
 ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
-  "cd '$REMOTE_DIR' && docker compose -f docker-compose.jetson.yaml up -d"
+  "set -euo pipefail; \
+   stale_ids=\$(docker ps -aq --filter ancestor=gpt-sovits-jetson:local); \
+   for id in \$stale_ids; do \
+     name=\$(docker inspect --format '{{.Name}}' \$id | sed 's#^/##'); \
+     if [ \"\$name\" != 'gpt-sovits-jetson' ]; then docker rm -f \$id >/dev/null 2>&1 || true; fi; \
+   done; \
+   cd '$REMOTE_DIR' && docker compose -f docker-compose.jetson.yaml up -d"
 
 ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" "\
   set -euo pipefail; \
