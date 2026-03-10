@@ -18,6 +18,7 @@ from typing import List, Tuple, Union
 import ffmpeg
 import librosa
 import numpy as np
+import soundfile as sf
 import torch
 import torch.nn.functional as F
 import yaml
@@ -770,7 +771,14 @@ class TTS:
             self.prompt_cache["refer_spec"][0] = spec_audio
 
     def _get_ref_spec(self, ref_audio_path):
-        raw_audio, raw_sr = torchaudio.load(ref_audio_path)
+        try:
+            audio_np, raw_sr = sf.read(ref_audio_path, dtype="float32", always_2d=True)
+            audio_np = audio_np.T
+        except Exception:
+            audio_np, raw_sr = librosa.load(ref_audio_path, sr=None, mono=False)
+            if audio_np.ndim == 1:
+                audio_np = audio_np[np.newaxis, :]
+        raw_audio = torch.from_numpy(np.ascontiguousarray(audio_np))
         raw_audio = raw_audio.to(self.configs.device).float()
         self.prompt_cache["raw_audio"] = raw_audio
         self.prompt_cache["raw_sr"] = raw_sr

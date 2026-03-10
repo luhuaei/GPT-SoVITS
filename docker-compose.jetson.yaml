@@ -1,0 +1,18 @@
+services:
+  gpt-sovits-jetson:
+    build:
+      context: .
+      dockerfile: Dockerfile.jetson
+    image: gpt-sovits-jetson:local
+    container_name: gpt-sovits-jetson
+    environment:
+      GPT_SOVITS_TTS_CONFIG: GPT_SoVITS/configs/tts_infer.yaml
+      GPT_SOVITS_RUNTIME_DIR: /workspace/runtime
+      GPT_SOVITS_MODEL_ID: gpt-sovits-v2proplus-jetson
+      GPT_SOVITS_MAX_CONCURRENT: "1"
+      GPT_SOVITS_MAX_QUEUE: "16"
+    volumes:
+      - ./runtime:/workspace/runtime
+      - ./test-results:/workspace/test-results
+    restart: unless-stopped
+    network_mode: host

@@ -1,0 +1,53 @@
+FROM registry.lazycat.cloud/x/lzc-aipod-cuda:2a9aebc
+
+SHELL ["/bin/bash", "-lc"]
+
+ARG UV_INDEX_URL=http://wa.lan:10608/simple
+ARG UV_TRUSTED_HOST=wa.lan
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    NLTK_DATA=/usr/local/share/nltk_data \
+    GPT_SOVITS_RUNTIME_DIR=/workspace/runtime \
+    GPT_SOVITS_MODEL_ID=gpt-sovits-v2proplus-jetson \
+    GPT_SOVITS_MAX_CONCURRENT=1 \
+    GPT_SOVITS_MAX_QUEUE=16
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    ffmpeg \
+    git \
+    libsox-dev \
+    python3-pip \
+    sox \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace/GPT-SoVITS
+
+COPY requirements.txt requirements-test.txt /workspace/GPT-SoVITS/
+
+RUN grep -v '^pyopenjtalk' requirements.txt > requirements.jetson.txt && \
+    python3 -m pip install --no-cache-dir \
+      torch torchvision torchaudio torchcodec triton \
+      -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}" && \
+    python3 -m pip install --no-cache-dir \
+      -r requirements.jetson.txt \
+      -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}" && \
+    python3 -m pip install --no-cache-dir \
+      -r requirements-test.txt \
+      -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}"
+
+COPY . /workspace/GPT-SoVITS
+COPY jetson/models/pretrained_models /workspace/GPT-SoVITS/GPT_SoVITS/pretrained_models
+COPY jetson/models/G2PWModel /workspace/GPT-SoVITS/GPT_SoVITS/text/G2PWModel
+COPY jetson/models/nltk_data /usr/local/share/nltk_data
+
+RUN chmod +x /workspace/GPT-SoVITS/scripts/jetson/entrypoint.sh && \
+    mkdir -p /workspace/runtime /workspace/test-results
+
+EXPOSE 9880
+
+ENTRYPOINT ["/workspace/GPT-SoVITS/scripts/jetson/entrypoint.sh"]
+CMD ["python3", "api_v2.py", "-a", "0.0.0.0", "-p", "9880"]

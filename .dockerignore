@@ -8,6 +8,8 @@ tools/uvr5/uvr5_weights/*
 *.pyc
 env
 runtime
+test-results
+jetson/cache
 .idea
 output
 logs
