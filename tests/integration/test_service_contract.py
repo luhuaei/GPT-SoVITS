@@ -3,6 +3,8 @@ import requests
 
 from tests.integration.conftest import write_json
 
+GPU_PROVIDERS = {"CUDAExecutionProvider", "TensorrtExecutionProvider"}
+
 
 @pytest.mark.integration
 @pytest.mark.jetson
@@ -28,3 +30,5 @@ def test_metrics_endpoint(integration_config):
         {"endpoint": "/metrics", "status_code": response.status_code, "payload": payload},
     )
     assert "queue" in payload
+    assert payload["onnxruntime"]["installed"] is True
+    assert GPU_PROVIDERS.intersection(set(payload["onnxruntime"]["available_providers"]))

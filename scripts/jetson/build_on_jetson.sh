@@ -13,4 +13,4 @@ ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
    test -d '$REMOTE_DIR/jetson/models/pretrained_models' && \
    test -d '$REMOTE_DIR/jetson/models/G2PWModel' && \
    test -d '$REMOTE_DIR/jetson/models/nltk_data' && \
-   cd '$REMOTE_DIR' && docker build -f Dockerfile.jetson -t gpt-sovits-jetson:local ."
+   cd '$REMOTE_DIR' && DOCKER_BUILDKIT=1 docker build -f Dockerfile.jetson -t gpt-sovits-jetson:local ."

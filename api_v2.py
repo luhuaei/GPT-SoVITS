@@ -25,10 +25,15 @@ from typing import Generator, Union
 
 import numpy as np
 import soundfile as sf
+import torch
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
+try:
+    import onnxruntime
+except Exception:
+    onnxruntime = None
 
 now_dir = os.getcwd()
 sys.path.append(now_dir)
@@ -48,6 +53,27 @@ DEFAULT_RUNTIME_DIR = os.environ.get("GPT_SOVITS_RUNTIME_DIR", "runtime")
 DEFAULT_MODEL_ID = os.environ.get("GPT_SOVITS_MODEL_ID", "gpt-sovits-v2proplus-jetson")
 DEFAULT_MAX_CONCURRENT = int(os.environ.get("GPT_SOVITS_MAX_CONCURRENT", "1"))
 DEFAULT_MAX_QUEUE = int(os.environ.get("GPT_SOVITS_MAX_QUEUE", "16"))
+
+
+def configure_torch_runtime():
+    torch_threads = int(os.environ.get("GPT_SOVITS_TORCH_NUM_THREADS", "1"))
+    torch.set_num_threads(torch_threads)
+    try:
+        torch_interop_threads = int(os.environ.get("GPT_SOVITS_TORCH_INTEROP_THREADS", "1"))
+        torch.set_num_interop_threads(torch_interop_threads)
+    except RuntimeError:
+        # PyTorch only allows setting inter-op threads once per process.
+        pass
+
+
+def describe_onnx_runtime() -> dict:
+    if onnxruntime is None:
+        return {"installed": False, "available_providers": []}
+    try:
+        available_providers = onnxruntime.get_available_providers()
+    except Exception as exc:
+        return {"installed": True, "available_providers": [], "error": str(exc)}
+    return {"installed": True, "available_providers": available_providers}
 
 
 class TTS_Request(BaseModel):
@@ -100,6 +126,7 @@ class OpenAISpeechRequest(BaseModel):
 
 class ServiceState:
     def __init__(self, config_path: str, runtime_dir: str):
+        configure_torch_runtime()
         self.config_path = config_path
         self.runtime_dir = runtime_dir
         Path(runtime_dir).mkdir(parents=True, exist_ok=True)
@@ -384,7 +411,10 @@ def create_app(config_path: str = DEFAULT_CONFIG_PATH, runtime_dir: str = DEFAUL
                 "device": str(service.tts_config.device),
                 "is_half": service.tts_config.is_half,
                 "config_path": service.config_path,
+                "g2pw_enabled": os.environ.get("GPT_SOVITS_ENABLE_G2PW", "auto"),
+                "require_onnx_gpu": os.environ.get("GPT_SOVITS_REQUIRE_ONNX_GPU", "false"),
             },
+            "onnxruntime": describe_onnx_runtime(),
         }
 
     @app.get("/metrics")
@@ -395,6 +425,7 @@ def create_app(config_path: str = DEFAULT_CONFIG_PATH, runtime_dir: str = DEFAUL
             "model_id": service.model_id,
             "voice_count": len(service.voice_registry.registry),
             "queue": gate,
+            "onnxruntime": describe_onnx_runtime(),
         }
 
     @app.get("/v1/models")

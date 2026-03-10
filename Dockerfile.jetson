@@ -12,7 +12,18 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GPT_SOVITS_RUNTIME_DIR=/workspace/runtime \
     GPT_SOVITS_MODEL_ID=gpt-sovits-v2proplus-jetson \
     GPT_SOVITS_MAX_CONCURRENT=1 \
-    GPT_SOVITS_MAX_QUEUE=16
+    GPT_SOVITS_MAX_QUEUE=16 \
+    GPT_SOVITS_ENABLE_G2PW=auto \
+    GPT_SOVITS_REQUIRE_ONNX_GPU=true \
+    GPT_SOVITS_ONNX_INTRA_OP_THREADS=1 \
+    GPT_SOVITS_ONNX_INTER_OP_THREADS=1 \
+    GPT_SOVITS_TORCH_NUM_THREADS=1 \
+    GPT_SOVITS_TORCH_INTEROP_THREADS=1 \
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    TOKENIZERS_PARALLELISM=false
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -28,14 +39,23 @@ WORKDIR /workspace/GPT-SoVITS
 
 COPY requirements.txt requirements-test.txt /workspace/GPT-SoVITS/
 
-RUN grep -v '^pyopenjtalk' requirements.txt > requirements.jetson.txt && \
-    python3 -m pip install --no-cache-dir \
+RUN python3 -m pip install --no-cache-dir \
+      uv \
+      -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}"
+
+RUN grep -Ev '^(pyopenjtalk|onnxruntime|onnxruntime-gpu)($|[;=<> ])' requirements.txt > requirements.jetson.txt
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system \
       torch torchvision torchaudio torchcodec triton \
       -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}" && \
-    python3 -m pip install --no-cache-dir \
+    uv pip install --system \
+      "onnxruntime-gpu==1.24.3" "numpy<2" \
+      --default-index "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}" && \
+    uv pip install --system \
       -r requirements.jetson.txt \
       -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}" && \
-    python3 -m pip install --no-cache-dir \
+    uv pip install --system \
       -r requirements-test.txt \
       -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}"
 

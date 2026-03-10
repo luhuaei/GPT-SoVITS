@@ -11,6 +11,17 @@ services:
       GPT_SOVITS_MODEL_ID: gpt-sovits-v2proplus-jetson
       GPT_SOVITS_MAX_CONCURRENT: "1"
       GPT_SOVITS_MAX_QUEUE: "16"
+      GPT_SOVITS_ENABLE_G2PW: auto
+      GPT_SOVITS_REQUIRE_ONNX_GPU: "true"
+      GPT_SOVITS_ONNX_INTRA_OP_THREADS: "1"
+      GPT_SOVITS_ONNX_INTER_OP_THREADS: "1"
+      GPT_SOVITS_TORCH_NUM_THREADS: "1"
+      GPT_SOVITS_TORCH_INTEROP_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      TOKENIZERS_PARALLELISM: "false"
     volumes:
       - ./runtime:/workspace/runtime
       - ./test-results:/workspace/test-results

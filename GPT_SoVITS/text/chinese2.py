@@ -1,5 +1,6 @@
 import os
 import re
+import logging
 
 import cn2an
 from pypinyin import lazy_pinyin, Style
@@ -18,25 +19,55 @@ pinyin_to_symbol_map = {
 }
 
 import jieba_fast
-import logging
 
 jieba_fast.setLogLevel(logging.CRITICAL)
 import jieba_fast.posseg as psg
 
-# is_g2pw_str = os.environ.get("is_g2pw", "True")##默认开启
-# is_g2pw = False#True if is_g2pw_str.lower() == 'true' else False
-is_g2pw = True  # True if is_g2pw_str.lower() == 'true' else False
-if is_g2pw:
-    # print("当前使用g2pw进行拼音推理")
-    from text.g2pw import G2PWPinyin, correct_pronunciation
+logger = logging.getLogger(__name__)
 
-    parent_directory = os.path.dirname(current_file_path)
-    g2pw = G2PWPinyin(
-        model_dir="GPT_SoVITS/text/G2PWModel",
-        model_source=os.environ.get("bert_path", "GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large"),
-        v_to_u=False,
-        neutral_tone_with_five=True,
-    )
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _should_enable_g2pw() -> bool:
+    configured = os.environ.get("GPT_SOVITS_ENABLE_G2PW", os.environ.get("is_g2pw", "auto")).strip().lower()
+    if configured in {"0", "false", "no", "off"}:
+        return False
+    if configured in {"1", "true", "yes", "on"}:
+        return True
+    if _env_flag("GPT_SOVITS_REQUIRE_ONNX_GPU", default=False):
+        return True
+    try:
+        import onnxruntime
+
+        providers = set(onnxruntime.get_available_providers())
+    except Exception:
+        return False
+    return bool(providers.intersection({"CUDAExecutionProvider", "TensorrtExecutionProvider"}))
+
+
+is_g2pw = False
+g2pw = None
+correct_pronunciation = None
+if _should_enable_g2pw():
+    try:
+        from text.g2pw import G2PWPinyin, correct_pronunciation
+
+        g2pw = G2PWPinyin(
+            model_dir="GPT_SoVITS/text/G2PWModel",
+            model_source=os.environ.get("bert_path", "GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large"),
+            v_to_u=False,
+            neutral_tone_with_five=True,
+        )
+        is_g2pw = True
+    except Exception:
+        if _env_flag("GPT_SOVITS_REQUIRE_ONNX_GPU", default=False):
+            raise
+        logger.exception("g2pw initialization failed, falling back to pypinyin")
 
 rep_map = {
     "：": ",",

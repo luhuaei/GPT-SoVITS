@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import onnxruntime
 import requests
-import torch
 from opencc import OpenCC
 from pypinyin import Style, pinyin
 from transformers.models.auto.tokenization_auto import AutoTokenizer
@@ -28,6 +27,42 @@ except:
 warnings.filterwarnings("ignore")
 
 model_version = "1.1"
+GPU_PROVIDERS = ("CUDAExecutionProvider", "TensorrtExecutionProvider")
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_available_gpu_providers() -> List[str]:
+    available = set(onnxruntime.get_available_providers())
+    return [provider for provider in GPU_PROVIDERS if provider in available]
+
+
+def resolve_provider_plan() -> List[str]:
+    available = onnxruntime.get_available_providers()
+    preferred = get_available_gpu_providers()
+    if preferred:
+        return preferred + ["CPUExecutionProvider"]
+    if _env_flag("GPT_SOVITS_REQUIRE_ONNX_GPU", default=False):
+        raise RuntimeError(
+            "onnxruntime GPU provider is unavailable. "
+            f"available providers: {available}. "
+            "Install onnxruntime-gpu on Jetson and verify the container exposes CUDA."
+        )
+    return ["CPUExecutionProvider"]
+
+
+def build_session_options() -> onnxruntime.SessionOptions:
+    sess_options = onnxruntime.SessionOptions()
+    sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+    sess_options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+    sess_options.intra_op_num_threads = int(os.environ.get("GPT_SOVITS_ONNX_INTRA_OP_THREADS", "1"))
+    sess_options.inter_op_num_threads = int(os.environ.get("GPT_SOVITS_ONNX_INTER_OP_THREADS", "1"))
+    return sess_options
 
 
 def predict(session, onnx_input: Dict[str, Any], labels: List[str]) -> Tuple[List[str], List[float]]:
@@ -89,21 +124,25 @@ class G2PWOnnxConverter:
     ):
         uncompress_path = download_and_decompress(model_dir)
 
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-        sess_options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-        sess_options.intra_op_num_threads = 2 if torch.cuda.is_available() else 0
-        if "CUDAExecutionProvider" in onnxruntime.get_available_providers():
-            self.session_g2pW = onnxruntime.InferenceSession(
-                os.path.join(uncompress_path, "g2pW.onnx"),
-                sess_options=sess_options,
-                providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
-            )
-        else:
-            self.session_g2pW = onnxruntime.InferenceSession(
-                os.path.join(uncompress_path, "g2pW.onnx"),
-                sess_options=sess_options,
-                providers=["CPUExecutionProvider"],
+        model_path = os.path.join(uncompress_path, "g2pW.onnx")
+        sess_options = build_session_options()
+        provider_plan = resolve_provider_plan()
+        self.session_g2pW = onnxruntime.InferenceSession(
+            model_path,
+            sess_options=sess_options,
+            providers=provider_plan,
+        )
+        active_providers = self.session_g2pW.get_providers()
+        print(
+            f"G2PW ONNX providers available={onnxruntime.get_available_providers()} "
+            f"requested={provider_plan} active={active_providers}"
+        )
+        if _env_flag("GPT_SOVITS_REQUIRE_ONNX_GPU", default=False) and not any(
+            provider in GPU_PROVIDERS for provider in active_providers
+        ):
+            raise RuntimeError(
+                "G2PW ONNX session started without GPU provider. "
+                f"active providers: {active_providers}"
             )
         self.config = load_config(config_path=os.path.join(uncompress_path, "config.py"), use_default=True)
 
