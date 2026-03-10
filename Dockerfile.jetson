@@ -1,6 +1,5 @@
-FROM registry.lazycat.cloud/x/lzc-aipod-vllm:d59c2ca AS vllm_runtime
 FROM registry.lazycat.cloud/x/lzc-aipod-onnx:f503fe0 AS onnx_runtime
-FROM registry.lazycat.cloud/x/lzc-aipod-cuda:2a9aebc
+FROM registry.lazycat.cloud/x/lzc-aipod-vllm:d59c2ca
 
 SHELL ["/bin/bash", "-lc"]
 
@@ -28,10 +27,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TOKENIZERS_PARALLELISM=false
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     cmake \
-    ffmpeg \
-    git \
     libsox-dev \
     python3-pip \
     sox \
@@ -40,14 +36,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace/GPT-SoVITS
 
 COPY requirements.txt requirements-test.txt /workspace/GPT-SoVITS/
-COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torch /usr/local/lib/python3.10/dist-packages/torch
-COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torch-2.10.0.dist-info /usr/local/lib/python3.10/dist-packages/torch-2.10.0.dist-info
-COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/functorch /usr/local/lib/python3.10/dist-packages/functorch
-COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torchgen /usr/local/lib/python3.10/dist-packages/torchgen
-COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torchvision /usr/local/lib/python3.10/dist-packages/torchvision
-COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/torchvision-0.25.0.dist-info /usr/local/lib/python3.10/dist-packages/torchvision-0.25.0.dist-info
-COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/triton /usr/local/lib/python3.10/dist-packages/triton
-COPY --from=vllm_runtime /usr/local/lib/python3.10/dist-packages/triton-3.5.1.dist-info /usr/local/lib/python3.10/dist-packages/triton-3.5.1.dist-info
 COPY --from=onnx_runtime /usr/local/lib/python3.10/dist-packages/onnxruntime /usr/local/lib/python3.10/dist-packages/onnxruntime
 COPY --from=onnx_runtime /usr/local/lib/python3.10/dist-packages/onnxruntime_gpu-1.24.3.dist-info /usr/local/lib/python3.10/dist-packages/onnxruntime_gpu-1.24.3.dist-info
 
@@ -65,9 +53,17 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       -i "${UV_INDEX_URL}" --trusted-host "${UV_TRUSTED_HOST}"
 
 COPY . /workspace/GPT-SoVITS
-COPY jetson/models/pretrained_models /workspace/GPT-SoVITS/GPT_SoVITS/pretrained_models
+COPY jetson/models/pretrained_models/chinese-hubert-base /workspace/GPT-SoVITS/GPT_SoVITS/pretrained_models/chinese-hubert-base
+COPY jetson/models/pretrained_models/chinese-roberta-wwm-ext-large /workspace/GPT-SoVITS/GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large
+COPY jetson/models/pretrained_models/fast_langdetect /workspace/GPT-SoVITS/GPT_SoVITS/pretrained_models/fast_langdetect
+COPY jetson/models/pretrained_models/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt /workspace/GPT-SoVITS/GPT_SoVITS/pretrained_models/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt
+COPY jetson/models/pretrained_models/gsv-v2final-pretrained/s2G2333k.pth /workspace/GPT-SoVITS/GPT_SoVITS/pretrained_models/gsv-v2final-pretrained/s2G2333k.pth
 COPY jetson/models/G2PWModel /workspace/GPT-SoVITS/GPT_SoVITS/text/G2PWModel
-COPY jetson/models/nltk_data /usr/local/share/nltk_data
+COPY jetson/models/nltk_data/corpora/cmudict /usr/local/share/nltk_data/corpora/cmudict
+COPY jetson/models/nltk_data/corpora/cmudict.zip /usr/local/share/nltk_data/corpora/cmudict.zip
+COPY jetson/models/nltk_data/taggers/averaged_perceptron_tagger /usr/local/share/nltk_data/taggers/averaged_perceptron_tagger
+COPY jetson/models/nltk_data/taggers/averaged_perceptron_tagger.zip /usr/local/share/nltk_data/taggers/averaged_perceptron_tagger.zip
+COPY jetson/models/nltk_data/taggers/averaged_perceptron_tagger_eng /usr/local/share/nltk_data/taggers/averaged_perceptron_tagger_eng
 
 RUN chmod +x /workspace/GPT-SoVITS/scripts/jetson/entrypoint.sh && \
     mkdir -p /workspace/runtime /workspace/test-results
